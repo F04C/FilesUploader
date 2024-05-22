@@ -13,7 +13,8 @@ client.once('ready', () => {
 
 client.on('messageCreate', async (message) => {
   if (message.content.startsWith('!upload')) {
-    const folderPath = message.content.split(' ')[1];
+    const args = message.content.split(' ');
+    const folderPath = args[1];
 
     if (!folderPath) {
       return message.channel.send('Please provide a folder path.');
@@ -21,12 +22,27 @@ client.on('messageCreate', async (message) => {
 
     fs.readdir(folderPath, (err, files) => {
       if (err) {
+        console.error('Error reading the folder:', err);
         return message.channel.send('Error reading the folder.');
+      }
+
+      if (files.length === 0) {
+        return message.channel.send('The folder is empty.');
       }
 
       files.forEach((file) => {
         const filePath = path.join(folderPath, file);
-        message.channel.send({ files: [filePath] }).catch(console.error);
+        const fileStats = fs.statSync(filePath);
+
+        // Check file size
+        if (fileStats.size > 25 * 1024 * 1024) { // 25MB limit
+          return message.channel.send(`File ${file} is too large to upload (limit is 25MB).`);
+        }
+
+        message.channel.send({ files: [filePath] }).catch(error => {
+          console.error('Error uploading file:', error);
+          message.channel.send(`Failed to upload file ${file}.`);
+        });
       });
     });
   }
