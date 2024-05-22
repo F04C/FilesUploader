@@ -30,8 +30,14 @@ client.on('messageCreate', async (message) => {
         return message.channel.send('The folder is empty.');
       }
 
-      files.forEach((file) => {
+      // Sort files by creation time (oldest first)
+      files = files.map(file => {
         const filePath = path.join(folderPath, file);
+        const stat = fs.statSync(filePath);
+        return { file, filePath, birthtime: stat.birthtime };
+      }).sort((a, b) => a.birthtime - b.birthtime);
+
+      files.forEach(({ file, filePath }) => {
         const fileStats = fs.statSync(filePath);
 
         // Check file size
