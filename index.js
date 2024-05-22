@@ -1,64 +1,33 @@
-const { Client, GatewayIntentBits, REST, Routes } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
+const { Client, GatewayIntentBits } = require('discord.js');
 const config = require('./config');
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
 });
 
-const commands = [
-  {
-    name: 'upload',
-    description: 'Upload files from a specified folder',
-    options: [
-      {
-        name: 'path',
-        type: 3, // STRING type
-        description: 'The folder path to upload files from',
-        required: true
-      }
-    ]
-  }
-];
+client.once('ready', () => {
+  console.log('Bot is ready!');
+});
 
-const rest = new REST({ version: '9' }).setToken(config.discordToken);
-
-(async () => {
-  try {
-    console.log('Started refreshing application (/) commands.');
-
-    await rest.put(
-      Routes.applicationGuildCommands(client.user.id, 'your_guild_id'),
-      { body: commands },
-    );
-
-    console.log('Successfully reloaded application (/) commands.');
-  } catch (error) {
-    console.error(error);
-  }
-})();
-
-client.on('interactionCreate', async interaction => {
-  if (!interaction.isCommand()) return;
-
-  const { commandName, options } = interaction;
-
-  if (commandName === 'upload') {
-    const folderPath = options.getString('path');
+client.on('messageCreate', async (message) => {
+  if (message.content.startsWith('!upload')) {
+    const args = message.content.split(' ');
+    const folderPath = args[1];
 
     if (!folderPath) {
-      return interaction.reply('Please provide a folder path.');
+      return message.channel.send('Please provide a folder path.');
     }
 
     fs.readdir(folderPath, (err, files) => {
       if (err) {
         console.error('Error reading the folder:', err);
-        return interaction.reply('Error reading the folder.');
+        return message.channel.send('Error reading the folder.');
       }
 
       if (files.length === 0) {
-        return interaction.reply('The folder is empty.');
+        return message.channel.send('The folder is empty.');
       }
 
       // Sort files by creation time (oldest first)
@@ -71,24 +40,43 @@ client.on('interactionCreate', async interaction => {
       let uploadedCount = 0;
       const totalFiles = files.length;
 
-      files.forEach(({ file, filePath }) => {
-        const fileStats = fs.statSync(filePath);
+      // Initialize progress bar
+      let progressBar = '';
 
-        // Check file size
-        if (fileStats.size > 25 * 1024 * 1024) { // 25MB limit
-          return interaction.reply(`File ${file} is too large to upload (limit is 25MB).`);
-        }
+      // Update progress bar function
+      const updateProgressBar = () => {
+        const progress = Math.floor((uploadedCount / totalFiles) * 10);
+        const empty = 10 - progress;
+        progressBar = '[' + '▓'.repeat(progress) + '░'.repeat(empty) + ']';
+      };
 
-        interaction.deferReply().then(() => {
+      updateProgressBar();
+
+      // Send initial progress message with empty progress bar
+      message.channel.send('Uploading files...\n' + progressBar).then(progressMsg => {
+        files.forEach(({ file, filePath }) => {
+          const fileStats = fs.statSync(filePath);
+
+          // Check file size
+          if (fileStats.size > 25 * 1024 * 1024) { // 25MB limit
+            return message.channel.send(`File ${file} is too large to upload (limit is 25MB).`);
+          }
+
           message.channel.send({ files: [filePath] }).then(() => {
             uploadedCount++;
-            const progress = ((uploadedCount / totalFiles) * 100).toFixed(2);
+
+            // Update progress bar
+            updateProgressBar();
+
+            // Edit progress message with updated progress bar
+            progressMsg.edit('Uploading files...\n' + progressBar);
+
             if (uploadedCount === totalFiles) {
-              interaction.editReply(`All files have been uploaded. Upload progress: ${progress}%`);
+              message.channel.send('All files have been uploaded.');
             }
           }).catch(error => {
             console.error('Error uploading file:', error);
-            interaction.editReply(`Failed to upload file ${file}.`);
+            message.channel.send(`Failed to upload file ${file}.`);
           });
         });
       });
