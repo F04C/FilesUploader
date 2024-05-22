@@ -59,7 +59,8 @@ client.on('messageCreate', async (message) => {
 
           // Check file size
           if (fileStats.size > 25 * 1024 * 1024) { // 25MB limit
-            return message.channel.send(`File ${file} is too large to upload (limit is 25MB).`);
+            console.log(`File ${file} is too large to upload (limit is 25MB).`);
+            return; // Skip further processing of this file
           }
 
           message.channel.send({ files: [filePath] }).then(() => {
